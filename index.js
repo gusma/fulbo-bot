@@ -1,67 +1,85 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-const TelegramBot = require('node-telegram-bot-api');
+const axios = require("axios");
+const cheerio = require("cheerio");
+const TelegramBot = require("node-telegram-bot-api");
 
+require("dotenv").config();
+
+const botToken = process.env.BOT_TOKEN;
+const channelID = process.env.CHANNEL_ID;
+
+const bot = new TelegramBot(botToken, { polling: true });
+
+// Fetch the games from librefutbol
 async function fetchGames() {
   try {
-    const response = await axios.get('https://librefutboltv.com/agenda/');
-    
+    const response = await axios.get("https://librefutboltv.com/agenda/");
+
     const $ = cheerio.load(response.data);
     let games = [];
 
-    $('li a').each((i, element) => {
+    $("li a").each((i, element) => {
       const gameText = $(element).text().trim();
-  
-      if (gameText.includes('\n')) {
-        const parts = gameText.split('\n').map(part => part.trim());
-        const reorderedGameText = parts.reverse().join('-');
+
+      if (gameText.includes("\n")) {
+        const parts = gameText.split("\n").map((part) => part.trim());
+        const reorderedGameText = parts.reverse().join("-");
         games.push(reorderedGameText);
       }
     });
 
     return {
-      status: 'success',
-      content: games
+      status: "success",
+      content: games,
     };
-
   } catch (error) {
-    let errorMessage = '';
+    let errorMessage = "";
 
     if (error.response) {
-      errorMessage = `Error: Received a ${error.response.status} response from the server.`;
+      errorMessage = `Error: ${error.response.status} Recibido desde el servidor del sitio.`;
     } else if (error.request) {
-      // The request was made but no response was received
-      errorMessage = 'Error: No response from the server.';
+      // No response was received from the server.
+      errorMessage = "Error: Sin respuesta del servidor.";
     } else {
       errorMessage = `Error: ${error.message}`;
     }
 
     return {
-      status: 'error',
-      content: `${errorMessage}. Couldn't connect to the URL.`
+      status: "error",
+      content: `${errorMessage}. No se puede conectar con la url..`,
     };
   }
 }
 
-async function sendTelegramMessage(botToken, chatId, message) {
-  const apiUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  try {
-    await axios.post(apiUrl, {
-      chat_id: chatId,
-      text: message
-    });
-  } catch (error) {
-    console.error("Failed to send message via Telegram:", error.message);
+// Sends the games list (without links) to the channel.
+async function sendGamesList(chatId) {
+  const gamesResult = await fetchGames();
+  if (gamesResult.status === "success") {
+    const gamesList = gamesResult.content.join("\n");
+    bot
+      .sendMessage(
+        channelID,
+        `*Partidos de hoy:*\n${gamesList}\n\nInformacion extraida de librefutboltv.com`,
+        { parse_mode: "Markdown" }
+      )
+      .then(() => {
+        process.exit();
+      })
+      .catch((error) => {
+        console.error("Failed to send message:", error);
+        process.exit(1); // exit with an error code
+      });
+  } else {
+    bot
+      .sendMessage(chatId, gamesResult.content, { parse_mode: "Markdown" })
+      .then(() => {
+        process.exit();
+      })
+      .catch((error) => {
+        console.error("Failed to send message:", error);
+        process.exit(1); // exit with an error code
+      });
   }
 }
 
-fetchGames().then(result => {
-  if (result.status === 'success') {
-    const gamesList = result.content.join('\n');
-    // sendTelegramMessage(botToken, chatId, `Games today:\n${gamesList}`);
-   console.log("Games List", gamesList)
-  } else {
-    // sendTelegramMessage(botToken, chatId, result.content);
-   console.log("Error", result.content)
-  }
-});
+// Send a message when the script starts
+sendGamesList(channelID);
