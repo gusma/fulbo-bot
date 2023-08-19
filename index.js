@@ -22,7 +22,7 @@ async function fetchGames() {
 
       if (gameText.includes("\n")) {
         const parts = gameText.split("\n").map((part) => part.trim());
-        const reorderedGameText = parts.reverse().join("-");
+        const reorderedGameText = parts.reverse().join(" - ");
         games.push(reorderedGameText);
       }
     });
